@@ -3,10 +3,12 @@ package com.example.zzz
 import android.R.style
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -70,8 +72,11 @@ fun HomeScreen(navController: NavHostController) {
                 contentDescription = "Botão",
                 modifier = Modifier
                     .padding(20.dp)
-                    .size(120.dp)
-                    .clickable {
+                    .size(120.dp) // Define o tamanho exato da imagem
+                    .clickable(
+                        indication = null, // Remove a sombra/efeito padrão
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
                         navController.navigate("second")
                     }
             )

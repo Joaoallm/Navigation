@@ -30,12 +30,14 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.DatePickerDefaults.colors
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @Composable
 fun SecondScreen(navController: NavHostController) {
     val context = LocalContext.current
 
-    // Fundo
+    // Fundo da tela (imagem 1)
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(R.drawable._backgroud),
@@ -44,7 +46,7 @@ fun SecondScreen(navController: NavHostController) {
             contentScale = ContentScale.Crop
         )
 
-        // Botão de voltar no canto superior esquerdo
+        // Botão de voltar
         IconButton(
             onClick = { navController.popBackStack() },
             modifier = Modifier
@@ -59,14 +61,15 @@ fun SecondScreen(navController: NavHostController) {
             )
         }
     }
+
+    // Configuração de volume do dispositivo
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).toFloat()
     var volume by remember {
-        mutableStateOf(
-            audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()
-        )
+        mutableStateOf(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat())
     }
 
+    // Lista de músicas
     val musicas = listOf(
         Musica("A Mother's Love", R.raw.amotherslove),
         Musica("Dr. Hiruluk", R.raw.drhiruluk),
@@ -76,31 +79,29 @@ fun SecondScreen(navController: NavHostController) {
         Musica("Oden Store", R.raw.odenstore)
     )
 
+    // Estados de controle do player
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var musicaAtual by remember { mutableStateOf<Musica?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
     var currentPosition by remember { mutableStateOf(0) }
     var duration by remember { mutableStateOf(0) }
 
-    DisposableEffect(Unit) {
-        val handler = Handler(Looper.getMainLooper())
-        val updateTime = object : Runnable {
-            override fun run() {
-                mediaPlayer?.let {
-                    currentPosition = it.currentPosition
-                    duration = it.duration
-                    handler.postDelayed(this, 1000)
-                }
-            }
-        }
-        handler.post(updateTime)
+    // Estados para slider
+    var sliderPosition by remember { mutableStateOf(0f) }
+    var userInteractingWithSlider by remember { mutableStateOf(false) }
 
-        onDispose {
-            handler.removeCallbacks(updateTime)
-            mediaPlayer?.release()
+    // Atualiza posição da música a cada 0.5s
+    LaunchedEffect(mediaPlayer) {
+        while (mediaPlayer != null && isActive) {
+            mediaPlayer?.let {
+                currentPosition = it.currentPosition
+                duration = it.duration
+            }
+            delay(500L)
         }
     }
 
+    // Segundo fundo da tela (imagem 2)
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(R.drawable.bk2),
@@ -109,6 +110,7 @@ fun SecondScreen(navController: NavHostController) {
             contentScale = ContentScale.Crop
         )
 
+        // Lista com cards de música e controles
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -140,7 +142,7 @@ fun SecondScreen(navController: NavHostController) {
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
 
-                        // Linha superior: nome + botão play
+                        // Nome da música e botão de play/pause
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -151,63 +153,76 @@ fun SecondScreen(navController: NavHostController) {
                                 style = MaterialTheme.typography.titleMedium
                             )
 
-                            Button(onClick = {
-                                if (musicaAtual == musica) {
-                                    if (isPlaying) {
-                                        mediaPlayer?.pause()
-                                        isPlaying = false
+                            Button(
+                                onClick = {
+                                    if (musicaAtual == musica) {
+                                        // Se for a mesma música: alterna entre play/pause
+                                        if (isPlaying) {
+                                            mediaPlayer?.pause()
+                                            isPlaying = false
+                                        } else {
+                                            mediaPlayer?.start()
+                                            isPlaying = true
+                                        }
                                     } else {
-                                        mediaPlayer?.start()
+                                        // Troca de música
+                                        mediaPlayer?.release()
+                                        mediaPlayer = MediaPlayer.create(context, musica.resId).apply {
+                                            isLooping = false
+                                            start()
+                                        }
+                                        musicaAtual = musica
                                         isPlaying = true
                                     }
-                                } else {
-                                    mediaPlayer?.release()
-                                    mediaPlayer = MediaPlayer.create(context, musica.resId).apply {
-                                        isLooping = false
-                                        start()
-                                    }
-                                    musicaAtual = musica
-                                    isPlaying = true
-                                }
-                            },
+                                },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFF0077BE),
                                     contentColor = Color.White
-                                ),
-                                ) {
+                                )
+                            ) {
                                 Text(if (musicaAtual == musica && isPlaying) "Pause" else "Play")
                             }
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Linha inferior: tempo atual / duração
+                        // Tempo atual e duração
                         Text(
                             text = if (musicaAtual == musica) {
                                 "${formatTime(currentPosition)} / ${formatTime(duration)}"
                             } else {
                                 "00:00 / 00:00"
                             },
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF000000)),
                             modifier = Modifier.align(Alignment.Start)
                         )
 
-                        // Slider apenas se for a música atual
+                        // Slider de progresso, apenas para música atual
                         if (musicaAtual == musica) {
                             Slider(
-                                value = currentPosition.toFloat(),
+                                value = if (userInteractingWithSlider) sliderPosition else currentPosition.toFloat(),
                                 onValueChange = {
-                                    mediaPlayer?.seekTo(it.toInt())
-                                    currentPosition = it.toInt()
+                                    userInteractingWithSlider = true
+                                    sliderPosition = it
+                                },
+                                onValueChangeFinished = {
+                                    mediaPlayer?.seekTo(sliderPosition.toInt())
+                                    currentPosition = sliderPosition.toInt()
+                                    userInteractingWithSlider = false
                                 },
                                 valueRange = 0f..(duration.toFloat().coerceAtLeast(1f)),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFF0077BE),
+                                    activeTrackColor = Color(0xFF0077BE)
+                                )
                             )
                         }
                     }
                 }
             }
 
+            // Controle de volume
             item {
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -218,15 +233,21 @@ fun SecondScreen(navController: NavHostController) {
                         volume = it
                         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, it.toInt(), 0)
                     },
-                    valueRange = 0f..maxVolume
+                    valueRange = 0f..maxVolume,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFFFFFFFF),
+                        activeTrackColor = Color(0xFFFFFFFF)
+                    )
                 )
             }
         }
     }
 }
 
+// Classe representando uma música com nome e ID do recurso
 data class Musica(val nome: String, val resId: Int)
 
+// Função que formata milissegundos em MM:SS
 fun formatTime(ms: Int): String {
     val totalSeconds = ms / 1000
     val minutes = totalSeconds / 60
